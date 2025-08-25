@@ -424,7 +424,7 @@ const RealEstateListings = () => {
   // PROGRESSIVE DATA LOADING - Sales first, then rentals
   useEffect(() => {
     const loadSalesData = async () => {
-      try {
+      try {    
         console.log('Loading commercial sales properties...');
         const salesUrl = 'http://webapi.goyzer.com/Company.asmx/SalesListings?AccessCode=50!@Chestertons!29&GroupCode=5029&Bedrooms=&StartPriceRange=&EndPriceRange=&CategoryID=&SpecialProjects=&CountryID=&StateID=&CommunityID=&DistrictID=&FloorAreaMin=&FloorAreaMax=&UnitCategory=&UnitID=&BedroomsMax=&PropertyID=&ReadyNow=&PageIndex=&';
 
@@ -436,7 +436,7 @@ const RealEstateListings = () => {
           setDataSource('api');
           toast({
             title: "Sales Properties Loaded",
-            description: `Found ${salesProps.length} commercial properties for sale`
+            // description: `Found ${salesProps.length} commercial properties for sale`
           });
           setLoadingState(prev => ({ ...prev, sales: false, salesComplete: true }));
         } else {
@@ -478,7 +478,7 @@ const RealEstateListings = () => {
           setRentProperties(rentProps);
           toast({
             title: "Rental Properties Loaded",
-            description: `Found ${rentProps.length} commercial properties for rent`
+            // description: `Found ${rentProps.length} commercial properties for rent`
           });
           setLoadingState(prev => ({ ...prev, rent: false, rentComplete: true }));
         } else {
@@ -696,7 +696,7 @@ const RealEstateListings = () => {
           <CardContent className="p-6">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4 ">
               <div className="space-y-8 relative lg:col-span-1">
-                <Search className="absolute left-3 top-12 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
+                <Search className="absolute left-3 top-[3.25rem] transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
                 <Input
                   placeholder="Search properties, communities, or categories..."
                   value={searchTerm}
@@ -849,7 +849,7 @@ const RealEstateListings = () => {
                 <div key={`${community}-loading`} className="mb-12">
                   <div className="flex items-center mb-6 border-b-2 border-primary pb-2">
                     <h2 className="text-2xl font-bold text-foreground">
-                      {community}  
+                      {community}
                     </h2>
                     <Loader2 className="h-5 w-5 ml-2 animate-spin" />
                   </div>
