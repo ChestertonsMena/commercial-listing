@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, memo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { Search, Filter, MapPin, Bed, Square, ChevronLeft, ChevronRight, X, Phone, Mail, User, MessageSquare, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import ChestertonsLogo from '@/assets/Chestertons-Logo.png';
 
 // Import fallback images
 import heroProperty1 from '@/assets/react.svg';
@@ -37,52 +38,27 @@ interface ContactFormData {
   message: string;
 }
 
+interface LoadingState {
+  sales: boolean;
+  rent: boolean;
+  salesComplete: boolean;
+  rentComplete: boolean;
+  salesError: boolean;
+  rentError: boolean;
+}
+
 // Target communities - only these 3 will be shown
 const TARGET_COMMUNITIES = [
   'Business Bay',
-  'Motor City', 
+  'Motor City',
   'Barsha Heights'
 ];
 
-// CORS proxy URLs for XML fetching
+// CORS proxy URLs for XML fetching - optimized order
 const CORS_PROXIES = [
   'https://api.allorigins.win/raw?url=',
   'https://corsproxy.io/?',
-  'https://cors-anywhere.herokuapp.com/',
 ];
-
-// Function to extract all unique categories from XML
-const extractCategoriesFromXML = (xmlString: string): string[] => {
-  try {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
-    
-    const categories = new Set<string>();
-    const propertyElements = xmlDoc.querySelectorAll('UnitDTO, Property, property, PropertyInfo');
-
-    propertyElements.forEach((element) => {
-      const getFieldValue = (fieldNames: string[]): string => {
-        for (const fieldName of fieldNames) {
-          const field = element.querySelector(fieldName);
-          if (field && field.textContent?.trim()) {
-            return field.textContent.trim();
-          }
-        }
-        return '';
-      };
-
-      const category = getFieldValue(['Category', 'PropertyCategory', 'PropertyType', 'UnitCategory', 'Type']);
-      if (category) {
-        categories.add(category);
-      }
-    });
-
-    return Array.from(categories);
-  } catch (error) {
-    console.error('Error extracting categories:', error);
-    return [];
-  }
-};
 
 // Function to identify commercial categories
 const isCommercialCategory = (category: string): boolean => {
@@ -92,220 +68,215 @@ const isCommercialCategory = (category: string): boolean => {
     'showroom', 'mall', 'plaza', 'center', 'building', 'studio',
     'workspace', 'laboratory', 'workshop', 'factory', 'logistics', 'storage'
   ];
-  
+
   const categoryLower = category.toLowerCase();
   return commercialPatterns.some(pattern => categoryLower.includes(pattern));
 };
 
-// Mock data as fallback - only used if API completely fails
-const MOCK_PROPERTIES: Property[] = [
-  {
-    id: '1',
-    title: 'Premium Office Space - Business Bay Tower',
-    price: 2500000,
-    area: 1200,
-    bedrooms: 0,
-    community: 'Business Bay',
-    images: [heroProperty1, heroProperty2, heroProperty3],
-    type: 'sale',
-    propertyType: 'commercial',
-    category: 'Office'
-  },
-  {
-    id: '2',
-    title: 'Retail Shop - Motor City Plaza',
-    price: 180000,
-    area: 950,
-    bedrooms: 0,
-    community: 'Motor City',
-    images: [heroProperty2, heroProperty3, heroProperty1],
-    type: 'rent',
-    propertyType: 'commercial',
-    category: 'Retail'
-  },
-  {
-    id: '3',
-    title: 'Commercial Building - Business Bay',
-    price: 3200000,
-    area: 1500,
-    bedrooms: 0,
-    community: 'Business Bay',
-    images: [heroProperty3, heroProperty1, heroProperty2],
-    type: 'sale',
-    propertyType: 'commercial',
-    category: 'Commercial'
-  },
-  {
-    id: '4',
-    title: 'Office Space - Barsha Heights',
-    price: 120000,
-    area: 800,
-    bedrooms: 0,
-    community: 'Barsha Heights',
-    images: [heroProperty1, heroProperty3, heroProperty2],
-    type: 'rent',
-    propertyType: 'commercial',
-    category: 'Office'
-  },
-  {
-    id: '5',
-    title: 'Showroom - Business Bay',
-    price: 1800000,
-    area: 1000,
-    bedrooms: 0,
-    community: 'Business Bay',
-    images: [heroProperty2, heroProperty1, heroProperty3],
-    type: 'sale',
-    propertyType: 'commercial',
-    category: 'Showroom'
-  },
-  {
-    id: '6',
-    title: 'Warehouse - Motor City',
-    price: 95000,
-    area: 750,
-    bedrooms: 0,
-    community: 'Motor City',
-    images: [heroProperty3, heroProperty2, heroProperty1],
-    type: 'rent',
-    propertyType: 'commercial',
-    category: 'Warehouse'
-  }
-];
+// No mock data - removed as requested
 
 // Property Card Skeleton Component
-const PropertyCardSkeleton = () => {
-  return (
-    <Card className="overflow-hidden bg-gradient-card shadow-card border-2">
-      {/* Image Skeleton */}
-      <div className="relative h-64 overflow-hidden">
-        <Skeleton className="w-full h-full" />
-      </div>
-
-      <CardContent className="p-6">
-        {/* Title Skeleton */}
-        <Skeleton className="h-6 w-3/4 mb-2" />
-        
-        {/* Price Skeleton */}
-        <Skeleton className="h-8 w-1/2 mb-4" />
-
-        {/* Details Grid Skeleton */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="flex items-center">
-            <Skeleton className="h-4 w-4 mr-1" />
-            <Skeleton className="h-4 w-16" />
-          </div>
-          <div className="flex items-center">
-            <Skeleton className="h-4 w-4 mr-1" />
-            <Skeleton className="h-4 w-20" />
-          </div>
-        </div>
-        
-        {/* Category Skeleton */}
-        <Skeleton className="h-4 w-24 mb-4" />
-
-        {/* Button Skeleton */}
-        <Skeleton className="h-10 w-full" />
-      </CardContent>
-    </Card>
-  );
-};
-
-// Community Section Skeleton
-const CommunitySkeleton = ({ community }: { community: string }) => {
-  return (
-    <div className="mb-12">
-      <div className="flex items-center mb-6 border-b-2 border-primary pb-2">
-        <Skeleton className="h-8 w-48" />
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <PropertyCardSkeleton key={`${community}-skeleton-${index}`} />
-        ))}
-      </div>
+const PropertyCardSkeleton = () => (
+  <Card className="overflow-hidden bg-gradient-card shadow-card border-2">
+    <div className="relative h-64 overflow-hidden">
+      <Skeleton className="w-full h-full" />
     </div>
-  );
-};
-
-// Filter Section Skeleton
-const FilterSkeleton = () => {
-  return (
-    <Card className="mb-8 bg-gradient-card shadow-card border-2">
-      <CardContent className="p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="space-y-2">
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-10 w-full" />
-              {index > 0 && <Skeleton className="h-3 w-32" />}
-            </div>
-          ))}
+    <CardContent className="p-6">
+      <Skeleton className="h-6 w-3/4 mb-2" />
+      <Skeleton className="h-8 w-1/2 mb-4" />
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="flex items-center">
+          <Skeleton className="h-4 w-4 mr-1" />
+          <Skeleton className="h-4 w-16" />
         </div>
-        
-        <div className="flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-4 w-24" />
-          </div>
-          <Skeleton className="h-8 w-24" />
+        <div className="flex items-center">
+          <Skeleton className="h-4 w-4 mr-1" />
+          <Skeleton className="h-4 w-20" />
         </div>
-      </CardContent>
-    </Card>
-  );
-};
-
-// Main Skeleton Layout
-const MainSkeleton = () => {
-  return (
-    <div className="min-h-screen bg-gradient-subtle">
-      {/* Header */}
-      <header className="bg-gradient-purple shadow-purple">
-        <div className="container mx-auto px-4 py-6">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-primary-foreground mb-2">
-              Chestertons - Commercial Listings
-            </h1>
-            <p className="text-primary-foreground/90 text-lg">
-              Discover premium commercial properties in Dubai's business districts
-            </p>
-            <div className="mt-2 flex justify-center">
-              <div className="flex items-center space-x-2 text-sm">
-                <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></div>
-                <span className="text-primary-foreground/80">Loading properties...</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-8">
-        {/* Filter Skeleton */}
-        <FilterSkeleton />
-
-        {/* Tabs Skeleton */}
-        <div className="mb-8">
-          <div className="grid w-full grid-cols-2 bg-gradient-card border-2 rounded-lg p-1 mb-6">
-            <Skeleton className="h-10 rounded-md" />
-            <Skeleton className="h-10 rounded-md" />
-          </div>
-        </div>
-
-        {/* Communities Skeleton */}
-        {TARGET_COMMUNITIES.map(community => (
-          <CommunitySkeleton key={community} community={community} />
-        ))}
       </div>
-    </div>
-  );
+      <Skeleton className="h-4 w-24 mb-4" />
+      <Skeleton className="h-10 w-full" />
+    </CardContent>
+  </Card>
+);
+
+// Optimized XML parsing - process in chunks
+const parseXMLPropertiesOptimized = async (xmlString: string, type: 'sale' | 'rent'): Promise<Property[]> => {
+  try {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
+
+    const parserError = xmlDoc.querySelector('parsererror');
+    if (parserError) {
+      console.error('XML parsing error:', parserError.textContent);
+      return [];
+    }
+
+    const properties: Property[] = [];
+    const propertyElements = xmlDoc.querySelectorAll('UnitDTO, Property, property, PropertyInfo');
+
+    // Process in smaller chunks for better performance
+    const processChunk = async (elements: Element[], startIndex: number, chunkSize: number) => {
+      const endIndex = Math.min(startIndex + chunkSize, elements.length);
+
+      for (let i = startIndex; i < endIndex; i++) {
+        const element = elements[i];
+
+        try {
+          const getFieldValue = (fieldNames: string[]): string => {
+            for (const fieldName of fieldNames) {
+              const field = element.querySelector(fieldName);
+              if (field && field.textContent?.trim()) {
+                return field.textContent.trim();
+              }
+            }
+            return '';
+          };
+
+          const category = getFieldValue(['Category', 'PropertyCategory', 'PropertyType', 'UnitCategory', 'Type']);
+
+          // Only process commercial properties
+          if (!category || !isCommercialCategory(category)) {
+            continue;
+          }
+
+          const community = getFieldValue(['Community', 'CommunityName', 'Location', 'Area']);
+
+          // Community mappings
+          const communityMappings: { [key: string]: string } = {
+            'dubai investment park (dip)': 'Motor City',
+            'dubai investment park': 'Motor City',
+            'business bay': 'Business Bay',
+            'motor city': 'Motor City',
+            'barsha heights': 'Barsha Heights',
+            'al barsha heights': 'Barsha Heights'
+          };
+
+          const normalizedCommunity = community.toLowerCase();
+          const mappedCommunity = Object.keys(communityMappings).find(key =>
+            normalizedCommunity.includes(key)
+          );
+
+          const finalCommunity = mappedCommunity ? communityMappings[mappedCommunity] : community;
+
+          const isTargetCommunity = TARGET_COMMUNITIES.some(targetCommunity =>
+            finalCommunity.toLowerCase().includes(targetCommunity.toLowerCase()) ||
+            targetCommunity.toLowerCase().includes(finalCommunity.toLowerCase())
+          );
+
+          if (!isTargetCommunity) {
+            continue;
+          }
+
+          const title = getFieldValue(['PropertyName', 'PropertyTitle', 'Title', 'Name']) || `Property ${i + 1}`;
+
+          const priceStr = type === 'sale'
+            ? getFieldValue(['SellPrice', 'Price', 'PropertyPrice', 'SalePrice'])
+            : getFieldValue(['Rent', 'RentPrice', 'Price', 'PropertyPrice']);
+          const areaStr = getFieldValue(['BuiltupArea', 'FloorArea', 'Area', 'PropertyArea', 'TotalArea']);
+          const bedroomsStr = getFieldValue(['Bedrooms', 'BedroomCount', 'NumberOfBedrooms']);
+
+          const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
+          const area = parseFloat(areaStr.replace(/[^\d.]/g, '')) || 800;
+          const bedrooms = parseInt(bedroomsStr) || 0;
+
+          // Extract images
+          let images: string[] = [];
+          const imagesContainer = element.querySelector('Images');
+          if (imagesContainer) {
+            const imageElements = imagesContainer.querySelectorAll('Image ImageURL, Image > ImageURL');
+            images = Array.from(imageElements)
+              .map(img => img.textContent?.trim())
+              .filter(Boolean) as string[];
+          }
+
+          const fallbackImages = [heroProperty1, heroProperty2, heroProperty3];
+          const finalImages = images.length > 0 ? images.slice(0, 5) : fallbackImages; // Limit to 5 images
+
+          if (price > 0) {
+            properties.push({
+              id: `${type}-${Date.now()}-${i}`,
+              title,
+              price,
+              area,
+              bedrooms,
+              community: finalCommunity,
+              images: finalImages,
+              type,
+              propertyType: 'commercial',
+              category: category
+            });
+          }
+        } catch (error) {
+          console.error('Error parsing property element:', error);
+        }
+      }
+    };
+
+    // Process in chunks of 50 for better performance
+    const elements = Array.from(propertyElements);
+    const chunkSize = 50;
+    for (let i = 0; i < Math.min(elements.length, 300); i += chunkSize) { // Limit to first 300 elements
+      await processChunk(elements, i, chunkSize);
+
+      // Allow other operations to run
+      if (i % 100 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+
+    return properties;
+  } catch (error) {
+    console.error('Error parsing XML:', error);
+    return [];
+  }
+};
+
+// Optimized fetch with faster timeout and better error handling
+const fetchXMLDataOptimized = async (url: string, type: 'sale' | 'rent'): Promise<Property[]> => {
+  const fetchWithTimeout = async (proxyUrl: string, timeout: number = 8000): Promise<Property[] | null> => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+      const response = await fetch(`${proxyUrl}${encodeURIComponent(url)}`, {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/xml, text/xml, */*' },
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const xmlText = await response.text();
+        console.log(`Successfully fetched ${type} listings via ${proxyUrl}`);
+        const properties = await parseXMLPropertiesOptimized(xmlText, type);
+        console.log(`Parsed ${properties.length} ${type} commercial properties`);
+        return properties;
+      }
+    } catch (error) {
+      console.error(`Failed to fetch via ${proxyUrl}:`, error);
+    }
+    return null;
+  };
+
+  // Try proxies sequentially (faster than parallel for this case)
+  for (const proxy of CORS_PROXIES) {
+    const result = await fetchWithTimeout(proxy);
+    if (result && result.length > 0) {
+      return result;
+    }
+  }
+
+  console.warn(`Failed to fetch ${type} listings from all proxies`);
+  return [];
 };
 
 // Memoized PropertyCard component
-const PropertyCard = memo(({ 
-  property, 
-  currentIndex, 
-  onPrevImage, 
-  onNextImage, 
+const PropertyCard = memo(({
+  property,
+  currentIndex,
+  onPrevImage,
+  onNextImage,
   onImageIndexChange,
   onImageLoad,
   onSelectProperty,
@@ -324,7 +295,6 @@ const PropertyCard = memo(({
 }) => {
   return (
     <Card className="overflow-hidden bg-gradient-card shadow-card hover:shadow-glow transition-all duration-300 border-2 hover:border-primary group transform-gpu will-change-transform">
-      {/* Image Slider */}
       <div className="relative h-64 overflow-hidden">
         {!isImageLoaded && (
           <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
@@ -335,9 +305,8 @@ const PropertyCard = memo(({
           src={property.images[currentIndex]}
           alt={property.title}
           loading="lazy"
-          className={`w-full h-full object-cover transition-all duration-300 group-hover:scale-105 ${
-            isImageLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
+          className={`w-full h-full object-cover transition-all duration-300 group-hover:scale-105 ${isImageLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
           onLoad={() => onImageLoad(property.images[currentIndex])}
           onError={(e) => {
             const target = e.target as HTMLImageElement;
@@ -345,8 +314,7 @@ const PropertyCard = memo(({
             onImageLoad(heroProperty1);
           }}
         />
-        
-        {/* Image Navigation */}
+
         {property.images.length > 1 && isImageLoaded && (
           <>
             <button
@@ -363,16 +331,14 @@ const PropertyCard = memo(({
             >
               <ChevronRight className="h-4 w-4" />
             </button>
-            
-            {/* Dots Indicator */}
+
             <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
               {property.images.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => onImageIndexChange(index)}
-                  className={`w-2 h-2 rounded-full transition-colors duration-200 ${
-                    index === currentIndex ? 'bg-primary' : 'bg-primary-foreground/50'
-                  }`}
+                  className={`w-2 h-2 rounded-full transition-colors duration-200 ${index === currentIndex ? 'bg-primary' : 'bg-primary-foreground/50'
+                    }`}
                   aria-label={`Go to image ${index + 1}`}
                 />
               ))}
@@ -383,7 +349,7 @@ const PropertyCard = memo(({
 
       <CardContent className="p-6">
         <h3 className="text-xl font-semibold text-foreground mb-2">{property.title}</h3>
-        
+
         <div className="text-2xl font-bold text-primary mb-4">
           {formatPrice(property.price)}
           {property.type === 'rent' && <span className="text-sm font-normal text-muted-foreground">/year</span>}
@@ -399,7 +365,7 @@ const PropertyCard = memo(({
             {property.community}
           </div>
         </div>
-        
+
         {property.category && (
           <div className="text-sm text-muted-foreground mb-4">
             Category: <span className="font-medium">{property.category}</span>
@@ -408,7 +374,7 @@ const PropertyCard = memo(({
 
         <Dialog>
           <DialogTrigger asChild>
-            <Button 
+            <Button
               className="w-full bg-gradient-purple hover:shadow-glow transition-all duration-300"
               onClick={() => onSelectProperty(property)}
             >
@@ -423,186 +389,19 @@ const PropertyCard = memo(({
 
 PropertyCard.displayName = 'PropertyCard';
 
-// Parse XML to Property objects with commercial filtering
-const parseXMLProperties = (xmlString: string, type: 'sale' | 'rent'): Property[] => {
-  try {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
-    
-    // Check for XML parsing errors
-    const parserError = xmlDoc.querySelector('parsererror');
-    if (parserError) {
-      console.error('XML parsing error:', parserError.textContent);
-      return [];
-    }
-
-    const properties: Property[] = [];
-    const propertyElements = xmlDoc.querySelectorAll('UnitDTO, Property, property, PropertyInfo');
-
-    // Limit processing to first 200 elements for faster parsing
-    const limitedElements = Array.from(propertyElements).slice(0, 200);
-
-    limitedElements.forEach((element, index) => {
-      try {
-        // Extract fields with multiple possible names
-        const getFieldValue = (fieldNames: string[]): string => {
-          for (const fieldName of fieldNames) {
-            const field = element.querySelector(fieldName);
-            if (field && field.textContent?.trim()) {
-              return field.textContent.trim();
-            }
-          }
-          return '';
-        };
-
-        const category = getFieldValue(['Category', 'PropertyCategory', 'PropertyType', 'UnitCategory', 'Type']);
-        
-        // IMPORTANT: Only include properties with commercial categories
-        if (!category || !isCommercialCategory(category)) {
-          return; // Skip non-commercial properties
-        }
-
-        const community = getFieldValue(['Community', 'CommunityName', 'Location', 'Area']);
-        
-        // Filter by target communities (case-insensitive) - handle mappings
-        const communityMappings: { [key: string]: string } = {
-          'dubai investment park (dip)': 'Motor City',
-          'dubai investment park': 'Motor City',
-          'business bay': 'Business Bay',
-          'motor city': 'Motor City', 
-          'barsha heights': 'Barsha Heights',
-          'al barsha heights': 'Barsha Heights'
-        };
-
-        const normalizedCommunity = community.toLowerCase();
-        const mappedCommunity = Object.keys(communityMappings).find(key => 
-          normalizedCommunity.includes(key)
-        );
-        
-        const finalCommunity = mappedCommunity ? communityMappings[mappedCommunity] : community;
-        
-        const isTargetCommunity = TARGET_COMMUNITIES.some(targetCommunity =>
-          finalCommunity.toLowerCase().includes(targetCommunity.toLowerCase()) ||
-          targetCommunity.toLowerCase().includes(finalCommunity.toLowerCase())
-        );
-
-        if (!isTargetCommunity) {
-          return; // Skip properties not in target communities
-        }
-
-        const title = getFieldValue(['PropertyName', 'PropertyTitle', 'Title', 'Name']) || `Property ${index + 1}`;
-        
-        // For sales: SellPrice, for rentals: Rent
-        const priceStr = type === 'sale' 
-          ? getFieldValue(['SellPrice', 'Price', 'PropertyPrice', 'SalePrice'])
-          : getFieldValue(['Rent', 'RentPrice', 'Price', 'PropertyPrice']);
-        const areaStr = getFieldValue(['BuiltupArea', 'FloorArea', 'Area', 'PropertyArea', 'TotalArea']);
-        const bedroomsStr = getFieldValue(['Bedrooms', 'BedroomCount', 'NumberOfBedrooms']);
-
-        // Parse numeric values
-        const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
-        const area = parseFloat(areaStr.replace(/[^\d.]/g, '')) || 800;
-        const bedrooms = parseInt(bedroomsStr) || 0;
-
-        // Extract images - handle nested structure
-        let images: string[] = [];
-        const imagesContainer = element.querySelector('Images');
-        if (imagesContainer) {
-          const imageElements = imagesContainer.querySelectorAll('Image ImageURL, Image > ImageURL');
-          images = Array.from(imageElements)
-            .map(img => img.textContent?.trim())
-            .filter(Boolean) as string[];
-        } else {
-          // Fallback to direct image elements
-          const imageElements = element.querySelectorAll('Image, PropertyImage, ImageURL, Photo');
-          images = Array.from(imageElements)
-            .map(img => img.textContent?.trim())
-            .filter(Boolean) as string[];
-        }
-
-        // Use fallback images if no images found
-        const fallbackImages = [heroProperty1, heroProperty2, heroProperty3];
-        const finalImages = images.length > 0 ? images : fallbackImages;
-
-        if (price > 0) {
-          properties.push({
-            id: `${type}-${index}`,
-            title,
-            price,
-            area,
-            bedrooms: bedrooms || 0,
-            community: finalCommunity,
-            images: finalImages,
-            type,
-            propertyType: 'commercial',
-            category: category
-          });
-        }
-      } catch (error) {
-        console.error('Error parsing property element:', error);
-      }
-    });
-
-    return properties;
-  } catch (error) {
-    console.error('Error parsing XML:', error);
-    return [];
-  }
-};
-
-// Optimized fetch with timeout and parallel proxy attempts
-const fetchXMLDataOptimized = async (url: string, type: 'sale' | 'rent'): Promise<Property[]> => {
-  const fetchWithTimeout = async (proxyUrl: string, timeout: number = 15000): Promise<Property[] | null> => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-      
-      const response = await fetch(`${proxyUrl}${encodeURIComponent(url)}`, {
-        signal: controller.signal,
-        headers: { 'Accept': 'application/xml, text/xml, */*' },
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const xmlText = await response.text();
-        console.log(`Successfully fetched ${type} listings via ${proxyUrl}`);
-        const properties = parseXMLProperties(xmlText, type);
-        console.log(`Parsed ${properties.length} ${type} commercial properties`);
-        return properties;
-      }
-    } catch (error) {
-      console.error(`Failed to fetch via ${proxyUrl}:`, error);
-    }
-    return null;
-  };
-
-  // Try all proxies in parallel
-  const fetchPromises = CORS_PROXIES.map(proxy => fetchWithTimeout(proxy));
-  
-  try {
-    const results = await Promise.allSettled(fetchPromises);
-    
-    // Return the first successful result
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value && result.value.length > 0) {
-        return result.value;
-      }
-    }
-  } catch (error) {
-    console.error('Error in parallel fetch:', error);
-  }
-
-  console.warn(`Failed to fetch ${type} listings from all proxies`);
-  return [];
-};
-
 const RealEstateListings = () => {
-  // START WITH EMPTY STATE - SHOW SKELETON INITIALLY
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [loading, setLoading] = useState(true); // Show skeleton initially
-  const [isLoadingRealData, setIsLoadingRealData] = useState(false);
-  const [dataSource, setDataSource] = useState<'skeleton' | 'mock' | 'api'>('skeleton');
+  // State management
+  const [salesProperties, setSalesProperties] = useState<Property[]>([]);
+  const [rentProperties, setRentProperties] = useState<Property[]>([]);
+  const [loadingState, setLoadingState] = useState<LoadingState>({
+    sales: true,
+    rent: false,
+    salesComplete: false,
+    rentComplete: false,
+    salesError: false,
+    rentError: false
+  });
+  const [dataSource, setDataSource] = useState<'api' | 'error'>('api');
   const [searchTerm, setSearchTerm] = useState('');
   const [priceRange, setPriceRange] = useState([0, 5000000]);
   const [areaRange, setAreaRange] = useState([0, 2000]);
@@ -620,117 +419,106 @@ const RealEstateListings = () => {
 
   // Image slider states
   const [currentImageIndex, setCurrentImageIndex] = useState<{ [key: string]: number }>({});
-  
-  // Image loading states
   const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
 
-  // LOAD REAL DATA IMMEDIATELY
+  // PROGRESSIVE DATA LOADING - Sales first, then rentals
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoadingRealData(true);
-      
+    const loadSalesData = async () => {
       try {
+        console.log('Loading commercial sales properties...');
         const salesUrl = 'http://webapi.goyzer.com/Company.asmx/SalesListings?AccessCode=50!@Chestertons!29&GroupCode=5029&Bedrooms=&StartPriceRange=&EndPriceRange=&CategoryID=&SpecialProjects=&CountryID=&StateID=&CommunityID=&DistrictID=&FloorAreaMin=&FloorAreaMax=&UnitCategory=&UnitID=&BedroomsMax=&PropertyID=&ReadyNow=&PageIndex=&';
-        const rentUrl = 'http://webapi.goyzer.com/Company.asmx/RentListings?AccessCode=50!@Chestertons!29&GroupCode=5029&PropertyType=&Bedrooms=&StartPriceRange=&EndPriceRange=&categoryID=&CountryID=&StateID=&CommunityID=&FloorAreaMin=&FloorAreaMax=&UnitCategory=&UnitID=&BedroomsMax=&PropertyID=&ReadyNow=&PageIndex=&';
 
-        // Extract and log categories to see what's available
-        const extractAndLogCategories = async (url: string, type: string) => {
-          try {
-            for (const proxy of CORS_PROXIES) {
-              try {
-                const controller = new AbortController();
-                setTimeout(() => controller.abort(), 10000);
-                
-                const response = await fetch(`${proxy}${encodeURIComponent(url)}`, {
-                  signal: controller.signal
-                });
-                
-                if (response.ok) {
-                  const xmlText = await response.text();
-                  const categories = extractCategoriesFromXML(xmlText);
-                  console.log(`${type} Categories found:`, categories);
-                  
-                  const commercialCategories = categories.filter(isCommercialCategory);
-                  console.log(`${type} Commercial Categories:`, commercialCategories);
-                  break;
-                }
-              } catch (error) {
-                continue;
-              }
-            }
-          } catch (error) {
-            console.error(`Error extracting categories for ${type}:`, error);
-          }
-        };
-        
-        console.log('Loading commercial properties...');
-        
-        // Load properties and extract categories
-        const [salesProperties, rentProperties] = await Promise.all([
-          fetchXMLDataOptimized(salesUrl, 'sale'),
-          fetchXMLDataOptimized(rentUrl, 'rent'),
-          extractAndLogCategories(salesUrl, 'Sales'),
-          extractAndLogCategories(rentUrl, 'Rentals')
-        ]);
+        const salesProps = await fetchXMLDataOptimized(salesUrl, 'sale');
 
-        const allProperties = [...salesProperties, ...rentProperties];
-        
-        // Log the categories of properties we actually parsed
-        const actualCategories = new Set(allProperties.map(p => p.category).filter(Boolean));
-        console.log('Categories of parsed commercial properties:', Array.from(actualCategories));
-        
-        if (allProperties.length > 0) {
-          console.log(`Loaded ${allProperties.length} real commercial properties`);
-          setProperties(allProperties);
+        if (salesProps.length > 0) {
+          console.log(`Loaded ${salesProps.length} sales properties`);
+          setSalesProperties(salesProps);
           setDataSource('api');
-          setLoading(false);
           toast({
-            title: "Properties Loaded",
-            description: `Successfully loaded ${allProperties.length} commercial properties`
+            title: "Sales Properties Loaded",
+            description: `Found ${salesProps.length} commercial properties for sale`
           });
+          setLoadingState(prev => ({ ...prev, sales: false, salesComplete: true }));
         } else {
-          console.log('No real data found, using mock data');
-          setProperties(MOCK_PROPERTIES);
-          setDataSource('mock');
-          setLoading(false);
+          console.warn('No sales properties found');
+          setLoadingState(prev => ({ ...prev, sales: false, salesComplete: true, salesError: true }));
+          setDataSource('error');
           toast({
-            title: "Using Sample Data",
-            description: "Could not load live data, showing sample commercial properties",
+            title: "No Sales Properties Found",
+            description: "Could not find any commercial properties for sale in the target areas",
             variant: "destructive"
           });
         }
       } catch (error) {
-        console.error('Error loading data:', error);
-        setProperties(MOCK_PROPERTIES);
-        setDataSource('mock');
-        setLoading(false);
+        console.error('Error loading sales data:', error);
+        setLoadingState(prev => ({ ...prev, sales: false, salesComplete: true, salesError: true }));
+        setDataSource('error');
         toast({
-          title: "Using Sample Data",
-          description: "Could not load live data, showing sample commercial properties",
+          title: "Error Loading Sales Data",
+          description: "Failed to load commercial properties for sale",
           variant: "destructive"
         });
       } finally {
-        setIsLoadingRealData(false);
+        // Start loading rentals after sales complete
+        loadRentalsData();
       }
     };
 
-    // Start loading immediately
-    loadData();
+    const loadRentalsData = async () => {
+      setLoadingState(prev => ({ ...prev, rent: true }));
+
+      try {
+        console.log('Loading commercial rental properties...');
+        const rentUrl = 'http://webapi.goyzer.com/Company.asmx/RentListings?AccessCode=50!@Chestertons!29&GroupCode=5029&PropertyType=&Bedrooms=&StartPriceRange=&EndPriceRange=&categoryID=&CountryID=&StateID=&CommunityID=&FloorAreaMin=&FloorAreaMax=&UnitCategory=&UnitID=&BedroomsMax=&PropertyID=&ReadyNow=&PageIndex=&';
+
+        const rentProps = await fetchXMLDataOptimized(rentUrl, 'rent');
+
+        if (rentProps.length > 0) {
+          console.log(`Loaded ${rentProps.length} rental properties`);
+          setRentProperties(rentProps);
+          toast({
+            title: "Rental Properties Loaded",
+            description: `Found ${rentProps.length} commercial properties for rent`
+          });
+          setLoadingState(prev => ({ ...prev, rent: false, rentComplete: true }));
+        } else {
+          console.warn('No rental properties found');
+          setLoadingState(prev => ({ ...prev, rent: false, rentComplete: true, rentError: true }));
+          toast({
+            title: "No Rental Properties Found",
+            description: "Could not find any commercial properties for rent in the target areas",
+            variant: "destructive"
+          });
+        }
+      } catch (error) {
+        console.error('Error loading rental data:', error);
+        setLoadingState(prev => ({ ...prev, rent: false, rentComplete: true, rentError: true }));
+        toast({
+          title: "Error Loading Rental Data",
+          description: "Failed to load commercial properties for rent",
+          variant: "destructive"
+        });
+      }
+    };
+
+    // Start with sales data immediately
+    loadSalesData();
   }, [toast]);
 
-  // Filter properties based on search and filters
-  const filteredProperties = useMemo(() => {
-    return properties.filter(property => {
-      // Tab filter
-      if (property.type !== activeTab) return false;
+  // Get current properties based on active tab
+  const currentProperties = activeTab === 'sale' ? salesProperties : rentProperties;
+  const isCurrentTabLoading = activeTab === 'sale' ? loadingState.sales : loadingState.rent;
 
-      // Commercial filter - only show commercial properties
+  // Filter properties
+  const filteredProperties = useMemo(() => {
+    return currentProperties.filter(property => {
+      // Commercial filter
       if (property.propertyType !== 'commercial') return false;
 
       // Search filter
       if (searchTerm && !property.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !property.community.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !(property.category && property.category.toLowerCase().includes(searchTerm.toLowerCase()))) {
+        !property.community.toLowerCase().includes(searchTerm.toLowerCase()) &&
+        !(property.category && property.category.toLowerCase().includes(searchTerm.toLowerCase()))) {
         return false;
       }
 
@@ -744,20 +532,20 @@ const RealEstateListings = () => {
         return false;
       }
 
-      // Property type filter (by actual category)
-      if (selectedPropertyType && selectedPropertyType !== 'any' && 
-          property.category && !property.category.toLowerCase().includes(selectedPropertyType)) {
+      // Property type filter
+      if (selectedPropertyType && selectedPropertyType !== 'any' &&
+        property.category && !property.category.toLowerCase().includes(selectedPropertyType)) {
         return false;
       }
 
       return true;
     });
-  }, [properties, activeTab, searchTerm, priceRange, areaRange, selectedPropertyType]);
+  }, [currentProperties, searchTerm, priceRange, areaRange, selectedPropertyType]);
 
-  // Group properties by community - only show TARGET_COMMUNITIES
+  // Group properties by community
   const propertiesByCommunity = useMemo(() => {
     const grouped: { [key: string]: Property[] } = {};
-    
+
     TARGET_COMMUNITIES.forEach(community => {
       grouped[community] = filteredProperties.filter(p => p.community === community);
     });
@@ -765,7 +553,7 @@ const RealEstateListings = () => {
     return grouped;
   }, [filteredProperties]);
 
-  // Handle image navigation with useCallback for performance
+  // Image navigation handlers
   const nextImage = useCallback((propertyId: string, totalImages: number) => {
     setCurrentImageIndex(prev => ({
       ...prev,
@@ -780,12 +568,11 @@ const RealEstateListings = () => {
     }));
   }, []);
 
-  // Handle image load
   const handleImageLoad = useCallback((imageSrc: string) => {
     setLoadedImages(prev => new Set(prev).add(imageSrc));
   }, []);
 
-  // Handle contact form submission
+  // Contact form submission
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProperty) return;
@@ -793,37 +580,25 @@ const RealEstateListings = () => {
     setIsSubmittingContact(true);
 
     try {
-      // Zapier webhook data
       const webhookData = {
-        // Contact form data
         contact_name: contactForm.name,
         contact_email: contactForm.email,
         contact_phone: contactForm.phone,
         contact_message: contactForm.message,
-        
-        // Property details
         property_id: selectedProperty.id,
         property_title: selectedProperty.title,
         property_price: `AED ${selectedProperty.price.toLocaleString()}`,
         property_area: `${selectedProperty.area} sq ft`,
-        property_bedrooms: selectedProperty.bedrooms,
         property_community: selectedProperty.community,
         property_type: selectedProperty.type,
         property_category: selectedProperty.category,
-        property_images: selectedProperty.images.join(', '),
-        
-        // Metadata
         timestamp: new Date().toISOString(),
-        source: 'Real Estate Listings App',
-        user_agent: navigator.userAgent,
-        page_url: window.location.href
+        source: 'Real Estate Listings App'
       };
 
-      const response = await fetch('https://hooks.zapier.com/hooks/catch/21352187/utgtlkb/', {
+      await fetch('https://hooks.zapier.com/hooks/catch/21352187/utgtlkb/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         mode: 'no-cors',
         body: JSON.stringify(webhookData)
       });
@@ -833,7 +608,6 @@ const RealEstateListings = () => {
         description: "Thank you for your interest! We'll contact you soon."
       });
 
-      // Reset form
       setContactForm({ name: '', email: '', phone: '', message: '' });
       setSelectedProperty(null);
 
@@ -849,7 +623,6 @@ const RealEstateListings = () => {
     }
   };
 
-  // Clear all filters
   const clearFilters = () => {
     setSearchTerm('');
     setPriceRange([0, 5000000]);
@@ -857,66 +630,62 @@ const RealEstateListings = () => {
     setSelectedPropertyType('any');
   };
 
-  // Format price for display
   const formatPrice = (price: number) => {
     return `AED ${price.toLocaleString()}`;
   };
 
-  // Loading Indicator Component
-  const LoadingIndicator = () => {
-    if (!isLoadingRealData) return null;
-    
+  // Loading Indicators
+  const LoadingIndicator = ({ type, isLoading }: { type: string; isLoading: boolean }) => {
+    if (!isLoading) return null;
+
     return (
       <div className="fixed top-4 right-4 z-50">
         <Card className="p-4 shadow-lg border-2 border-primary bg-white">
           <div className="flex items-center space-x-2">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-sm font-medium">Loading live data...</span>
+            <span className="text-sm font-medium">Loading {type}...</span>
           </div>
         </Card>
       </div>
     );
   };
 
-  // Data Source Indicator Component
-  const DataSourceIndicator = () => (
-    <div className="flex items-center space-x-2 text-sm">
-      <div className={`w-2 h-2 rounded-full ${
-        dataSource === 'api' ? 'bg-green-500' : 
-        dataSource === 'mock' ? 'bg-yellow-500' : 
-        'bg-blue-500 animate-pulse'
-      }`}></div>
-      <span className="text-muted-foreground">
-        {dataSource === 'api' ? 'Live Data' : 
-         dataSource === 'mock' ? 'Sample Data' : 
-         'Loading...'}
-      </span>
-    </div>
-  );
-
-  // Show skeleton while loading
-  if (loading) {
-    return <MainSkeleton />;
-  }
+  // Remove unused DataSourceIndicator since we're not showing it anymore
+  // const DataSourceIndicator = () => (
+  //   <div className="flex items-center space-x-2 text-sm">
+  //     <div className={`w-2 h-2 rounded-full ${
+  //       dataSource === 'api' ? 'bg-green-500' : 'bg-red-500'
+  //     }`}></div>
+  //     <span className="text-muted-foreground">
+  //       {dataSource === 'api' ? 'Live Data' : 'No Data Available'}
+  //     </span>
+  //   </div>
+  // );
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
-      {/* Loading Indicator */}
-      <LoadingIndicator />
-      
+      <LoadingIndicator
+        type={activeTab === 'sale' ? 'commercial sales' : 'commercial rentals'}
+        isLoading={isCurrentTabLoading}
+      />
+
       {/* Header */}
       <header className="bg-gradient-purple shadow-purple">
-        <div className="container mx-auto px-4 py-6">
+        <div className="container mx-auto px-4 py-2">
           <div className="text-center">
-            <h1 className="text-4xl font-bold text-primary-foreground mb-2">
+
+            <img
+              src={ChestertonsLogo}
+              alt="Chestertons Logo"
+              className="mx-auto"
+              style={{ maxWidth: '180px' }} // Adjust the size if needed
+            />
+            {/* <h1 className="text-4xl font-bold text-primary-foreground mb-2">
               Chestertons - Commercial Listings
             </h1>
             <p className="text-primary-foreground/90 text-lg">
               Discover premium commercial properties in Dubai's business districts
-            </p>
-            <div className="mt-2">
-              <DataSourceIndicator />
-            </div>
+            </p> */}
           </div>
         </div>
       </header>
@@ -925,10 +694,9 @@ const RealEstateListings = () => {
         {/* Search and Filters */}
         <Card className="mb-8 bg-gradient-card shadow-card border-2">
           <CardContent className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4 flex justify-between items-center" >
-              {/* Search */}
-              <div className="relative lg:col-span-1">
-                <Search className="absolute left-3 top-5 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-4 ">
+              <div className="space-y-8 relative lg:col-span-1">
+                <Search className="absolute left-3 top-12 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
                 <Input
                   placeholder="Search properties, communities, or categories..."
                   value={searchTerm}
@@ -938,7 +706,7 @@ const RealEstateListings = () => {
               </div>
 
               {/* Price Range */}
-              <div className="space-y-2 lg:col-span-1">
+              <div className="space-y-6 lg:col-span-1">
                 <Label className="text-sm font-medium">Price Range</Label>
                 <div className="flex items-center space-x-2">
                   <input
@@ -966,7 +734,7 @@ const RealEstateListings = () => {
               </div>
 
               {/* Area Range */}
-              <div className="space-y-2 lg:col-span-1">
+              <div className="space-y-6 lg:col-span-1">
                 <Label className="text-sm font-medium">Area (sq ft)</Label>
                 <div className="flex items-center space-x-2">
                   <input
@@ -1019,15 +787,14 @@ const RealEstateListings = () => {
                   <Filter className="h-4 w-4" />
                   <span>Showing {filteredProperties.length} commercial properties</span>
                 </div>
-                <DataSourceIndicator />
               </div>
               <div className="flex items-center space-x-2">
-                {isLoadingRealData && (
+                {/* {isCurrentTabLoading && (
                   <Button variant="outline" size="sm" disabled>
                     <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    Loading Live Data
+                    Loading
                   </Button>
-                )}
+                )} */}
                 <Button variant="outline" onClick={clearFilters} size="sm">
                   Clear Filters
                 </Button>
@@ -1040,58 +807,126 @@ const RealEstateListings = () => {
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'sale' | 'rent')} className="mb-8">
           <TabsList className="grid w-full grid-cols-2 bg-gradient-card border-2">
             <TabsTrigger value="sale" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Commercial Sales
+              Commercial Sales ({activeTab === 'sale' ? filteredProperties.length : salesProperties.filter(p => {
+                // Apply same filters to get accurate count
+                if (searchTerm && !p.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                  !p.community.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                  !(p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))) {
+                  return false;
+                }
+                if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
+                if (p.area < areaRange[0] || p.area > areaRange[1]) return false;
+                if (selectedPropertyType && selectedPropertyType !== 'any' &&
+                  p.category && !p.category.toLowerCase().includes(selectedPropertyType)) {
+                  return false;
+                }
+                return true;
+              }).length})
             </TabsTrigger>
             <TabsTrigger value="rent" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Commercial Rentals
+              Commercial Rentals ({activeTab === 'rent' ? filteredProperties.length : rentProperties.filter(p => {
+                // Apply same filters to get accurate count
+                if (searchTerm && !p.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                  !p.community.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                  !(p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))) {
+                  return false;
+                }
+                if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
+                if (p.area < areaRange[0] || p.area > areaRange[1]) return false;
+                if (selectedPropertyType && selectedPropertyType !== 'any' &&
+                  p.category && !p.category.toLowerCase().includes(selectedPropertyType)) {
+                  return false;
+                }
+                return true;
+              }).length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value={activeTab} className="mt-6">
-            {TARGET_COMMUNITIES.map(community => {
-              const communityProperties = propertiesByCommunity[community];
-              if (communityProperties.length === 0) return null;
-
-              return (
-                <div key={community} className="mb-12">
-                  <h2 className="text-2xl font-bold text-foreground mb-6 border-b-2 border-primary pb-2">
-                    {community} ({communityProperties.length} properties)
-                  </h2>
-                  
+            {/* Show loading skeletons for empty communities while loading */}
+            {isCurrentTabLoading && currentProperties.length === 0 ? (
+              TARGET_COMMUNITIES.map(community => (
+                <div key={`${community}-loading`} className="mb-12">
+                  <div className="flex items-center mb-6 border-b-2 border-primary pb-2">
+                    <h2 className="text-2xl font-bold text-foreground">
+                      {community}  
+                    </h2>
+                    <Loader2 className="h-5 w-5 ml-2 animate-spin" />
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {communityProperties.map((property) => {
-                      const currentIndex = currentImageIndex[property.id] || 0;
-                      const isImageLoaded = loadedImages.has(property.images[currentIndex]);
-                      
-                      return (
-                        <PropertyCard
-                          key={property.id}
-                          property={property}
-                          currentIndex={currentIndex}
-                          onPrevImage={() => prevImage(property.id, property.images.length)}
-                          onNextImage={() => nextImage(property.id, property.images.length)}
-                          onImageIndexChange={(index) => setCurrentImageIndex(prev => ({ ...prev, [property.id]: index }))}
-                          onImageLoad={handleImageLoad}
-                          onSelectProperty={setSelectedProperty}
-                          isImageLoaded={isImageLoaded}
-                          formatPrice={formatPrice}
-                        />
-                      );
-                    })}
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <PropertyCardSkeleton key={`${community}-skeleton-${index}`} />
+                    ))}
                   </div>
                 </div>
-              );
-            })}
-            
-            {/* Show message if no properties found in any target community */}
-            {TARGET_COMMUNITIES.every(community => propertiesByCommunity[community].length === 0) && (
-              <div className="text-center py-12">
-                <div className="text-muted-foreground text-lg">
-                  No commercial properties found in Business Bay, Motor City, or Barsha Heights matching your criteria.
-                </div>
-                <Button onClick={clearFilters} className="mt-4">Clear Filters</Button>
-              </div>
+              ))
+            ) : (
+              TARGET_COMMUNITIES.map(community => {
+                const communityProperties = propertiesByCommunity[community];
+                const hasProperties = communityProperties && communityProperties.length > 0;
+                const isLoadingThisCommunity = isCurrentTabLoading && !hasProperties;
+
+                return (
+                  <div key={community} className="mb-12">
+                    <h2 className="text-2xl font-bold text-foreground mb-6 border-b-2 border-primary pb-2">
+                      {community} ({hasProperties ? communityProperties.length : '0'} properties)
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {hasProperties ? (
+                        communityProperties.map((property) => {
+                          const currentIndex = currentImageIndex[property.id] || 0;
+                          const isImageLoaded = loadedImages.has(property.images[currentIndex]);
+
+                          return (
+                            <PropertyCard
+                              key={property.id}
+                              property={property}
+                              currentIndex={currentIndex}
+                              onPrevImage={() => prevImage(property.id, property.images.length)}
+                              onNextImage={() => nextImage(property.id, property.images.length)}
+                              onImageIndexChange={(index) => setCurrentImageIndex(prev => ({ ...prev, [property.id]: index }))}
+                              onImageLoad={handleImageLoad}
+                              onSelectProperty={setSelectedProperty}
+                              isImageLoaded={isImageLoaded}
+                              formatPrice={formatPrice}
+                            />
+                          );
+                        })
+                      ) : isLoadingThisCommunity ? (
+                        // Show skeletons while loading this community
+                        Array.from({ length: 3 }).map((_, index) => (
+                          <PropertyCardSkeleton key={`${community}-skeleton-${index}`} />
+                        ))
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })
             )}
+
+            {/* Show message if no properties found and not loading */}
+            {!isCurrentTabLoading &&
+              TARGET_COMMUNITIES.every(community => propertiesByCommunity[community]?.length === 0) && (
+                <div className="text-center py-12">
+                  <div className="text-muted-foreground text-lg mb-4">
+                    {activeTab === 'sale' && loadingState.salesError ?
+                      'Failed to load commercial properties for sale. Please try refreshing the page.' :
+                      activeTab === 'rent' && loadingState.rentError ?
+                        'Failed to load commercial properties for rent. Please try refreshing the page.' :
+                        'No commercial properties found in Business Bay, Motor City, or Barsha Heights matching your criteria.'
+                    }
+                  </div>
+                  {(activeTab === 'sale' && loadingState.salesError) ||
+                    (activeTab === 'rent' && loadingState.rentError) ? (
+                    <Button onClick={() => window.location.reload()} className="mt-4">
+                      Refresh Page
+                    </Button>
+                  ) : (
+                    <Button onClick={clearFilters} className="mt-4">Clear Filters</Button>
+                  )}
+                </div>
+              )}
           </TabsContent>
         </Tabs>
 
