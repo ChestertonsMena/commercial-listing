@@ -29,6 +29,7 @@ interface Property {
   type: 'sale' | 'rent';
   propertyType: 'commercial' | 'residential';
   category?: string;
+  agentName?: string;
 }
 
 interface ContactFormData {
@@ -72,8 +73,6 @@ const isCommercialCategory = (category: string): boolean => {
   const categoryLower = category.toLowerCase();
   return commercialPatterns.some(pattern => categoryLower.includes(pattern));
 };
-
-// No mock data - removed as requested
 
 // Property Card Skeleton Component
 const PropertyCardSkeleton = () => (
@@ -175,6 +174,13 @@ const parseXMLPropertiesOptimized = async (xmlString: string, type: 'sale' | 're
             : getFieldValue(['Rent', 'RentPrice', 'Price', 'PropertyPrice']);
           const areaStr = getFieldValue(['BuiltupArea', 'FloorArea', 'Area', 'PropertyArea', 'TotalArea']);
           const bedroomsStr = getFieldValue(['Bedrooms', 'BedroomCount', 'NumberOfBedrooms']);
+          
+          // Extract agent information
+          const agentName = getFieldValue([
+            'AgentName', 'Agent', 'ListedBy', 'ContactPerson', 
+            'SalesAgent', 'ListingAgent', 'PropertyAgent', 'AgentFirstName',
+            'ContactName', 'ResponsibleAgent', 'AgentFullName'
+          ]) || 'Chestertons Agent';
 
           const price = parseFloat(priceStr.replace(/[^\d.]/g, '')) || 0;
           const area = parseFloat(areaStr.replace(/[^\d.]/g, '')) || 800;
@@ -204,7 +210,8 @@ const parseXMLPropertiesOptimized = async (xmlString: string, type: 'sale' | 're
               images: finalImages,
               type,
               propertyType: 'commercial',
-              category: category
+              category: category,
+              agentName: agentName
             });
           }
         } catch (error) {
@@ -372,6 +379,13 @@ const PropertyCard = memo(({
           </div>
         )}
 
+        {property.agentName && (
+          <div className="text-sm text-muted-foreground mb-4 flex items-center">
+            <User className="h-3 w-3 mr-1" />
+            Listed by: <span className="font-medium ml-1 text-primary">{property.agentName}</span>
+          </div>
+        )}
+
         <Dialog>
           <DialogTrigger asChild>
             <Button
@@ -407,6 +421,7 @@ const RealEstateListings = () => {
   const [areaRange, setAreaRange] = useState([0, 2000]);
   const [selectedPropertyType, setSelectedPropertyType] = useState<string>('any');
   const [activeTab, setActiveTab] = useState<'sale' | 'rent'>('sale');
+  const [activeCommunity, setActiveCommunity] = useState<string>('Business Bay');
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [contactForm, setContactForm] = useState<ContactFormData>({
     name: '',
@@ -434,11 +449,25 @@ const RealEstateListings = () => {
           console.log(`Loaded ${salesProps.length} sales properties`);
           setSalesProperties(salesProps);
           setDataSource('api');
-          toast({
-            title: "Sales Properties Loaded",
-            // description: `Found ${salesProps.length} commercial properties for sale`
-          });
           setLoadingState(prev => ({ ...prev, sales: false, salesComplete: true }));
+          
+          // Use the exact same filtering logic as used in the main app
+          setTimeout(() => {
+            const targetCommunitySalesCount = salesProps.filter(p => {
+              // Must be commercial (this filter is already applied in parsing, but double-check)
+              if (p.propertyType !== 'commercial') return false;
+              // Use the same community matching logic as the main app
+              return TARGET_COMMUNITIES.some(targetCommunity =>
+                p.community.toLowerCase().includes(targetCommunity.toLowerCase()) ||
+                targetCommunity.toLowerCase().includes(p.community.toLowerCase())
+              );
+            }).length;
+            
+            toast({
+              title: "Sales Properties Loaded",
+              description: `Found Sales commercial properties for sale in target areas`
+            });
+          }, 100);
         } else {
           console.warn('No sales properties found');
           setLoadingState(prev => ({ ...prev, sales: false, salesComplete: true, salesError: true }));
@@ -476,11 +505,25 @@ const RealEstateListings = () => {
         if (rentProps.length > 0) {
           console.log(`Loaded ${rentProps.length} rental properties`);
           setRentProperties(rentProps);
-          toast({
-            title: "Rental Properties Loaded",
-            // description: `Found ${rentProps.length} commercial properties for rent`
-          });
           setLoadingState(prev => ({ ...prev, rent: false, rentComplete: true }));
+          
+          // Use the exact same filtering logic as used in the main app  
+          setTimeout(() => {
+            const targetCommunityRentCount = rentProps.filter(p => {
+              // Must be commercial (this filter is already applied in parsing, but double-check)
+              if (p.propertyType !== 'commercial') return false;
+              // Use the same community matching logic as the main app
+              return TARGET_COMMUNITIES.some(targetCommunity =>
+                p.community.toLowerCase().includes(targetCommunity.toLowerCase()) ||
+                targetCommunity.toLowerCase().includes(p.community.toLowerCase())
+              );
+            }).length;
+            
+            toast({
+              title: "Rental Properties Loaded", 
+              description: `Found Rental commercial properties for rent in target areas`
+            });
+          }, 100);
         } else {
           console.warn('No rental properties found');
           setLoadingState(prev => ({ ...prev, rent: false, rentComplete: true, rentError: true }));
@@ -542,16 +585,29 @@ const RealEstateListings = () => {
     });
   }, [currentProperties, searchTerm, priceRange, areaRange, selectedPropertyType]);
 
+  // Get only properties that match target communities for display
+  const targetCommunityProperties = useMemo(() => {
+    return filteredProperties.filter(property => {
+      return TARGET_COMMUNITIES.some(targetCommunity =>
+        property.community.toLowerCase().includes(targetCommunity.toLowerCase()) ||
+        targetCommunity.toLowerCase().includes(property.community.toLowerCase())
+      );
+    });
+  }, [filteredProperties]);
+
   // Group properties by community
   const propertiesByCommunity = useMemo(() => {
     const grouped: { [key: string]: Property[] } = {};
 
     TARGET_COMMUNITIES.forEach(community => {
-      grouped[community] = filteredProperties.filter(p => p.community === community);
+      grouped[community] = targetCommunityProperties.filter(p => p.community === community);
     });
 
     return grouped;
-  }, [filteredProperties]);
+  }, [targetCommunityProperties]);
+
+  // Get current community properties
+  const currentCommunityProperties = propertiesByCommunity[activeCommunity] || [];
 
   // Image navigation handlers
   const nextImage = useCallback((propertyId: string, totalImages: number) => {
@@ -592,6 +648,7 @@ const RealEstateListings = () => {
         property_community: selectedProperty.community,
         property_type: selectedProperty.type,
         property_category: selectedProperty.category,
+        agent_name: selectedProperty.agentName || 'Chestertons Agent',
         timestamp: new Date().toISOString(),
         source: 'Real Estate Listings App'
       };
@@ -650,18 +707,6 @@ const RealEstateListings = () => {
     );
   };
 
-  // Remove unused DataSourceIndicator since we're not showing it anymore
-  // const DataSourceIndicator = () => (
-  //   <div className="flex items-center space-x-2 text-sm">
-  //     <div className={`w-2 h-2 rounded-full ${
-  //       dataSource === 'api' ? 'bg-green-500' : 'bg-red-500'
-  //     }`}></div>
-  //     <span className="text-muted-foreground">
-  //       {dataSource === 'api' ? 'Live Data' : 'No Data Available'}
-  //     </span>
-  //   </div>
-  // );
-
   return (
     <div className="min-h-screen bg-gradient-subtle">
       <LoadingIndicator
@@ -673,19 +718,12 @@ const RealEstateListings = () => {
       <header className="bg-gradient-purple shadow-purple">
         <div className="container mx-auto px-4 py-2">
           <div className="text-center">
-
             <img
               src={ChestertonsLogo}
               alt="Chestertons Logo"
               className="mx-auto"
-              style={{ maxWidth: '180px' }} // Adjust the size if needed
+              style={{ maxWidth: '160px' }}
             />
-            {/* <h1 className="text-4xl font-bold text-primary-foreground mb-2">
-              Chestertons - Commercial Listings
-            </h1>
-            <p className="text-primary-foreground/90 text-lg">
-              Discover premium commercial properties in Dubai's business districts
-            </p> */}
           </div>
         </div>
       </header>
@@ -785,16 +823,10 @@ const RealEstateListings = () => {
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                   <Filter className="h-4 w-4" />
-                  <span>Showing {filteredProperties.length} commercial properties</span>
+                  <span>Showing {targetCommunityProperties.length} commercial properties</span>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                {/* {isCurrentTabLoading && (
-                  <Button variant="outline" size="sm" disabled>
-                    <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                    Loading
-                  </Button>
-                )} */}
                 <Button variant="outline" onClick={clearFilters} size="sm">
                   Clear Filters
                 </Button>
@@ -803,130 +835,132 @@ const RealEstateListings = () => {
           </CardContent>
         </Card>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'sale' | 'rent')} className="mb-8">
+        {/* Main Tabs - Sale/Rent */}
+        <Tabs value={activeTab} onValueChange={(value) => {
+          setActiveTab(value as 'sale' | 'rent');
+          // Reset to first community when switching between sale/rent
+          setActiveCommunity('Business Bay');
+        }} className="mb-8">
           <TabsList className="grid w-full grid-cols-2 bg-gradient-card border-2">
             <TabsTrigger value="sale" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Commercial Sales ({activeTab === 'sale' ? filteredProperties.length : salesProperties.filter(p => {
-                // Apply same filters to get accurate count
-                if (searchTerm && !p.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
-                  !p.community.toLowerCase().includes(searchTerm.toLowerCase()) &&
-                  !(p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))) {
-                  return false;
-                }
-                if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
-                if (p.area < areaRange[0] || p.area > areaRange[1]) return false;
-                if (selectedPropertyType && selectedPropertyType !== 'any' &&
-                  p.category && !p.category.toLowerCase().includes(selectedPropertyType)) {
-                  return false;
-                }
-                return true;
-              }).length})
+              Commercial Sales ({activeTab === 'sale' ? targetCommunityProperties.length : 
+                salesProperties.filter(p => {
+                  // Apply same filtering logic for accurate count
+                  if (p.propertyType !== 'commercial') return false;
+                  if (searchTerm && !p.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                    !p.community.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                    !(p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))) {
+                    return false;
+                  }
+                  if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
+                  if (p.area < areaRange[0] || p.area > areaRange[1]) return false;
+                  if (selectedPropertyType && selectedPropertyType !== 'any' &&
+                    p.category && !p.category.toLowerCase().includes(selectedPropertyType)) {
+                    return false;
+                  }
+                  return TARGET_COMMUNITIES.some(targetCommunity =>
+                    p.community.toLowerCase().includes(targetCommunity.toLowerCase()) ||
+                    targetCommunity.toLowerCase().includes(p.community.toLowerCase())
+                  );
+                }).length})
             </TabsTrigger>
             <TabsTrigger value="rent" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Commercial Rentals ({activeTab === 'rent' ? filteredProperties.length : rentProperties.filter(p => {
-                // Apply same filters to get accurate count
-                if (searchTerm && !p.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
-                  !p.community.toLowerCase().includes(searchTerm.toLowerCase()) &&
-                  !(p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))) {
-                  return false;
-                }
-                if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
-                if (p.area < areaRange[0] || p.area > areaRange[1]) return false;
-                if (selectedPropertyType && selectedPropertyType !== 'any' &&
-                  p.category && !p.category.toLowerCase().includes(selectedPropertyType)) {
-                  return false;
-                }
-                return true;
-              }).length})
+              Commercial Rentals ({activeTab === 'rent' ? targetCommunityProperties.length : 
+                rentProperties.filter(p => {
+                  // Apply same filtering logic for accurate count
+                  if (p.propertyType !== 'commercial') return false;
+                  if (searchTerm && !p.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                    !p.community.toLowerCase().includes(searchTerm.toLowerCase()) &&
+                    !(p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))) {
+                    return false;
+                  }
+                  if (p.price < priceRange[0] || p.price > priceRange[1]) return false;
+                  if (p.area < areaRange[0] || p.area > areaRange[1]) return false;
+                  if (selectedPropertyType && selectedPropertyType !== 'any' &&
+                    p.category && !p.category.toLowerCase().includes(selectedPropertyType)) {
+                    return false;
+                  }
+                  return TARGET_COMMUNITIES.some(targetCommunity =>
+                    p.community.toLowerCase().includes(targetCommunity.toLowerCase()) ||
+                    targetCommunity.toLowerCase().includes(p.community.toLowerCase())
+                  );
+                }).length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value={activeTab} className="mt-6">
-            {/* Show loading skeletons for empty communities while loading */}
-            {isCurrentTabLoading && currentProperties.length === 0 ? (
-              TARGET_COMMUNITIES.map(community => (
-                <div key={`${community}-loading`} className="mb-12">
-                  <div className="flex items-center mb-6 border-b-2 border-primary pb-2">
-                    <h2 className="text-2xl font-bold text-foreground">
-                      {community}
-                    </h2>
-                    <Loader2 className="h-5 w-5 ml-2 animate-spin" />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Array.from({ length: 3 }).map((_, index) => (
-                      <PropertyCardSkeleton key={`${community}-skeleton-${index}`} />
-                    ))}
-                  </div>
-                </div>
-              ))
-            ) : (
-              TARGET_COMMUNITIES.map(community => {
-                const communityProperties = propertiesByCommunity[community];
-                const hasProperties = communityProperties && communityProperties.length > 0;
-                const isLoadingThisCommunity = isCurrentTabLoading && !hasProperties;
+            {/* Community Tabs */}
+            <Tabs value={activeCommunity} onValueChange={setActiveCommunity} className="mb-6">
+              <TabsList className="grid w-full grid-cols-3 bg-gradient-card border-2">
+                {TARGET_COMMUNITIES.map(community => {
+                  // Get filtered count for this specific community and current tab
+                  const communityCount = targetCommunityProperties.filter(p => p.community === community).length;
+                  return (
+                    <TabsTrigger 
+                      key={community} 
+                      value={community}
+                      className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      {community} ({communityCount})
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
 
-                return (
-                  <div key={community} className="mb-12">
-                    <h2 className="text-2xl font-bold text-foreground mb-6 border-b-2 border-primary pb-2">
-                      {community} ({hasProperties ? communityProperties.length : '0'} properties)
-                    </h2>
-
+              {TARGET_COMMUNITIES.map(community => (
+                <TabsContent key={community} value={community} className="mt-6">
+                  {/* Show loading skeletons while loading */}
+                  {isCurrentTabLoading && currentProperties.length === 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {hasProperties ? (
-                        communityProperties.map((property) => {
-                          const currentIndex = currentImageIndex[property.id] || 0;
-                          const isImageLoaded = loadedImages.has(property.images[currentIndex]);
-
-                          return (
-                            <PropertyCard
-                              key={property.id}
-                              property={property}
-                              currentIndex={currentIndex}
-                              onPrevImage={() => prevImage(property.id, property.images.length)}
-                              onNextImage={() => nextImage(property.id, property.images.length)}
-                              onImageIndexChange={(index) => setCurrentImageIndex(prev => ({ ...prev, [property.id]: index }))}
-                              onImageLoad={handleImageLoad}
-                              onSelectProperty={setSelectedProperty}
-                              isImageLoaded={isImageLoaded}
-                              formatPrice={formatPrice}
-                            />
-                          );
-                        })
-                      ) : isLoadingThisCommunity ? (
-                        // Show skeletons while loading this community
-                        Array.from({ length: 3 }).map((_, index) => (
-                          <PropertyCardSkeleton key={`${community}-skeleton-${index}`} />
-                        ))
-                      ) : null}
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <PropertyCardSkeleton key={`${community}-skeleton-${index}`} />
+                      ))}
                     </div>
-                  </div>
-                );
-              })
-            )}
+                  ) : propertiesByCommunity[community]?.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {propertiesByCommunity[community].map((property) => {
+                        const currentIndex = currentImageIndex[property.id] || 0;
+                        const isImageLoaded = loadedImages.has(property.images[currentIndex]);
 
-            {/* Show message if no properties found and not loading */}
-            {!isCurrentTabLoading &&
-              TARGET_COMMUNITIES.every(community => propertiesByCommunity[community]?.length === 0) && (
-                <div className="text-center py-12">
-                  <div className="text-muted-foreground text-lg mb-4">
-                    {activeTab === 'sale' && loadingState.salesError ?
-                      'Failed to load commercial properties for sale. Please try refreshing the page.' :
-                      activeTab === 'rent' && loadingState.rentError ?
-                        'Failed to load commercial properties for rent. Please try refreshing the page.' :
-                        'No commercial properties found in Business Bay, Motor City, or Barsha Heights matching your criteria.'
-                    }
-                  </div>
-                  {(activeTab === 'sale' && loadingState.salesError) ||
-                    (activeTab === 'rent' && loadingState.rentError) ? (
-                    <Button onClick={() => window.location.reload()} className="mt-4">
-                      Refresh Page
-                    </Button>
-                  ) : (
-                    <Button onClick={clearFilters} className="mt-4">Clear Filters</Button>
-                  )}
-                </div>
-              )}
+                        return (
+                          <PropertyCard
+                            key={property.id}
+                            property={property}
+                            currentIndex={currentIndex}
+                            onPrevImage={() => prevImage(property.id, property.images.length)}
+                            onNextImage={() => nextImage(property.id, property.images.length)}
+                            onImageIndexChange={(index) => setCurrentImageIndex(prev => ({ ...prev, [property.id]: index }))}
+                            onImageLoad={handleImageLoad}
+                            onSelectProperty={setSelectedProperty}
+                            isImageLoaded={isImageLoaded}
+                            formatPrice={formatPrice}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : !isCurrentTabLoading ? (
+                    <div className="text-center py-12">
+                      <div className="text-muted-foreground text-lg mb-4">
+                        {activeTab === 'sale' && loadingState.salesError ?
+                          `Failed to load commercial properties for sale in ${community}. Please try refreshing the page.` :
+                          activeTab === 'rent' && loadingState.rentError ?
+                            `Failed to load commercial properties for rent in ${community}. Please try refreshing the page.` :
+                            `No commercial properties found in ${community} matching your criteria.`
+                        }
+                      </div>
+                      {((activeTab === 'sale' && loadingState.salesError) ||
+                        (activeTab === 'rent' && loadingState.rentError)) ? (
+                        <Button onClick={() => window.location.reload()} className="mt-4">
+                          Refresh Page
+                        </Button>
+                      ) : (
+                        <Button onClick={clearFilters} className="mt-4">Clear Filters</Button>
+                      )}
+                    </div>
+                  ) : null}
+                </TabsContent>
+              ))}
+            </Tabs>
           </TabsContent>
         </Tabs>
 
@@ -973,6 +1007,12 @@ const RealEstateListings = () => {
                       <span className="text-muted-foreground">Community:</span>
                       <span className="font-semibold">{selectedProperty.community}</span>
                     </div>
+                    {selectedProperty.agentName && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Listed by:</span>
+                        <span className="font-semibold">{selectedProperty.agentName}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
